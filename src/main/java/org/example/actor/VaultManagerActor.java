@@ -3,6 +3,8 @@ package org.example.actor;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.manager.GetArtifactFromManager;
 import org.example.message.vault.AddArtifactToVault;
@@ -23,6 +25,8 @@ public class VaultManagerActor extends AbstractActor
     private final Map<String, ActorRef> artifactManagers = new HashMap<>();
     private final Map<Integer, ActorRef> warehouses = new HashMap<>();
 
+    private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+
     public static Props props(int numberOfShards, int replicaCount, int initialWarehouses)
     {
         return Props.create(VaultManagerActor.class, () -> new VaultManagerActor(numberOfShards, replicaCount, initialWarehouses));
@@ -36,8 +40,10 @@ public class VaultManagerActor extends AbstractActor
         for (int i = 0; i < initialWarehouses; ++i)
         {
             int id = nextWarehouseId++;
-            warehouses.put(id, getContext().actorOf(WarehouseActor.props(id)));
+            warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "warehouse-" + id));
         }
+
+        log.info("Created VaultManager");
     }
 
     @Override
@@ -52,7 +58,8 @@ public class VaultManagerActor extends AbstractActor
 
     private void addArtifact(String artifactId, List<Byte> data)
     {
-        ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount));
+        ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount), "artifactManager-" + artifactId);
+
         artifactManagers.put(artifactId, artifactManager);
     }
 

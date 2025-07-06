@@ -3,6 +3,8 @@ package org.example.actor;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import com.google.common.collect.Multimap;
 import org.example.message.collector.ArtifactResponseFromCollector;
 import org.example.message.collector.CollectShardsForCollector;
@@ -20,20 +22,25 @@ public class ShardCollectorActor extends AbstractActor
 
     private final ActorRef originalSender;
 
-    public static Props props(String artifactId, Multimap<Integer, ActorRef> warehouses)
+    private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+
+    public static Props props(String artifactId, Multimap<Integer, ActorRef> warehouses, ActorRef originalSender)
     {
-        return Props.create(ShardCollectorActor.class, () -> new ShardCollectorActor(artifactId, warehouses));
+        return Props.create(ShardCollectorActor.class, () -> new ShardCollectorActor(artifactId, warehouses, originalSender));
     }
 
-    public ShardCollectorActor(String artifactId, Multimap<Integer, ActorRef> warehouses)
+    public ShardCollectorActor(String artifactId, Multimap<Integer, ActorRef> warehouses, ActorRef originalSender)
     {
         this.artifactId = artifactId;
         this.warehouses = warehouses;
-        this.shards = new ArrayList<>(warehouses.keys().size());
 
+        int maxShardId = Collections.max(warehouses.keySet());
+        this.shards = new ArrayList<>(Collections.nCopies(maxShardId + 1, null));
         this.shardsLeft = new HashSet<>(warehouses.keys());
 
-        this.originalSender = getSender();
+        this.originalSender = originalSender;
+
+        log.info("Created artifact collector of artifact [" + artifactId + "]");
     }
 
     @Override
@@ -63,6 +70,7 @@ public class ShardCollectorActor extends AbstractActor
             for (ActorRef warehouse : warehouses.get(shardId))
             {
                 warehouse.tell(new GetShardFromWarehouse(artifactId, shardId), getSelf());
+                log.info("Asked for shard [" + shardId + "]");
             }
         }
     }
@@ -96,6 +104,7 @@ public class ShardCollectorActor extends AbstractActor
     {
         List<Byte> artifact = shards.stream().flatMap(Collection::stream).toList();
         originalSender.tell(new ArtifactResponseFromCollector(artifactId, artifact), getSelf());
+        log.info("Sending artifact [" + artifactId + "] to client");
         getContext().stop(getSelf());
     }
 }

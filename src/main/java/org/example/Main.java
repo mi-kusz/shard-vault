@@ -13,7 +13,6 @@ import scala.jdk.javaapi.FutureConverters;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.CompletionStage;
-import java.util.stream.Stream;
 
 public class Main
 {
@@ -22,17 +21,14 @@ public class Main
         ActorSystem actorSystem = ActorSystem.create("Vault");
         ActorRef vault = actorSystem.actorOf(VaultManagerActor.props(5, 3, 10));
 
-        vault.tell(new AddArtifactToVault("nazwa", Collections.nCopies(20, (byte) 1)), ActorRef.noSender());
+        vault.tell(new AddArtifactToVault("artefakt", Collections.nCopies(19, (byte) 1)), ActorRef.noSender());
 
-        /*
-        CompletionStage<Object> future = FutureConverters.asJava(Patterns.ask(vault, new GetArtifactFromVault("nazwa"), Timeout.create(Duration.ofSeconds(5))));
+        CompletionStage<Object> future = FutureConverters.asJava(Patterns.ask(vault, new GetArtifactFromVault("artefakt"), Timeout.create(Duration.ofSeconds(5))));
 
         future.thenAccept(response -> {
             ArtifactResponseFromCollector artifact = (ArtifactResponseFromCollector) response;
             System.out.println(artifact.artifactId());
             System.out.println(artifact.data());
         });
-
-        */
     }
 }

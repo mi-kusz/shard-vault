@@ -3,6 +3,8 @@ package org.example.actor;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -20,6 +22,8 @@ public class ArtifactManagerActor extends AbstractActor
     private final String artifactId;
     private final Multimap<Integer, ActorRef> dataWarehouses = ArrayListMultimap.create();
 
+    private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+
     public static Props props(String artifactId, List<Byte> data, List<ActorRef> warehouses, int numberOfShards, int replicaCount)
     {
         return Props.create(ArtifactManagerActor.class, () -> new ArtifactManagerActor(artifactId, data, warehouses, numberOfShards, replicaCount));
@@ -36,10 +40,15 @@ public class ArtifactManagerActor extends AbstractActor
 
         warehouses = new ArrayList<>(warehouses);
 
+        log.info("Creating ArtifactManager [" + artifactId + "]. Data length: " + data.size());
+
         for (int shardId = 0; shardId < numberOfShards; ++shardId)
         {
             int startIndex = shardId * shardSize;
             int endIndex = Math.min((shardId + 1) * shardSize, data.size());
+
+            log.info("Shard [" + shardId + "] range: [" + startIndex + ":" + endIndex + "]");
+
             List<Byte> shard = data.subList(startIndex, endIndex);
 
             Collections.shuffle(warehouses);
@@ -63,8 +72,7 @@ public class ArtifactManagerActor extends AbstractActor
 
     private void getArtifact(GetArtifactFromManager message)
     {
-        ActorRef collector =  getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses));
-        collector.forward(message, getContext());
+        ActorRef collector = getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSender()), "artifactCollector-" + artifactId);
     }
 
     private void deleteArtifact(DeleteArtifactFromManager message)
