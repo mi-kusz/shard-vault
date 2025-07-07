@@ -50,7 +50,7 @@ public class WarehouseActor extends AbstractActor
         if (!warehouse.containsKey(artifactId))
         {
             warehouse.put(artifactId, new HashMap<>());
-            log.info("Created map for storing shards of [" + artifactId + "]");
+            log.info("Created a map for storing shards of [" + artifactId + "]");
         }
 
         warehouse.get(artifactId).put(shardId, data);
@@ -70,6 +70,12 @@ public class WarehouseActor extends AbstractActor
             {
                 warehouse.get(artifactId).remove(shardId);
                 log.info("Deleted shard [" + shardId + "] of artifact [" + artifactId + "]");
+
+                if (warehouse.get(artifactId).isEmpty())
+                {
+                    warehouse.remove(artifactId);
+                    log.info("Removed a map for storing shards of [" + artifactId + "]");
+                }
             }
             else
             {

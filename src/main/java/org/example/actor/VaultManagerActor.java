@@ -5,12 +5,10 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+import com.google.common.base.Preconditions;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.manager.GetArtifactFromManager;
-import org.example.message.vault.AddArtifactToVault;
-import org.example.message.vault.ArtifactNotFoundInVault;
-import org.example.message.vault.DeleteArtifactFromVault;
-import org.example.message.vault.GetArtifactFromVault;
+import org.example.message.vault.*;
 
 import java.util.HashMap;
 import java.util.List;
@@ -20,6 +18,7 @@ public class VaultManagerActor extends AbstractActor
 {
     private final int numberOfShards;
     private final int replicaCount;
+    private final int initialWarehouses;
 
     private int nextWarehouseId = 0;
     private final Map<String, ActorRef> artifactManagers = new HashMap<>();
@@ -34,9 +33,16 @@ public class VaultManagerActor extends AbstractActor
 
     public VaultManagerActor(int numberOfShards, int replicaCount, int initialWarehouses)
     {
+        Preconditions.checkArgument(initialWarehouses >= 1, "Warehouses number must be greater or equal 1");
+
         this.numberOfShards = numberOfShards;
         this.replicaCount = replicaCount;
+        this.initialWarehouses = initialWarehouses;
+    }
 
+    @Override
+    public void preStart()
+    {
         for (int i = 0; i < initialWarehouses; ++i)
         {
             int id = nextWarehouseId++;
@@ -61,8 +67,16 @@ public class VaultManagerActor extends AbstractActor
         String artifactId = message.artifactId();
         List<Byte> data = message.data();
 
-        ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount), "artifactManager-" + artifactId);
-        artifactManagers.put(artifactId, artifactManager);
+        if (artifactManagers.containsKey(artifactId))
+        {
+            log.warning("Artifact [" + artifactId + "] already exists");
+            getSender().tell(new ArtifactAlreadyExistsInVault(artifactId), getSelf());
+        }
+        else
+        {
+            ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount), "artifactManager-" + artifactId);
+            artifactManagers.put(artifactId, artifactManager);
+        }
     }
 
     private void getArtifact(GetArtifactFromVault message)
@@ -76,6 +90,7 @@ public class VaultManagerActor extends AbstractActor
         }
         else
         {
+            log.warning("Artifact [" + artifactId + "] not found in the vault");
             getSender().tell(new ArtifactNotFoundInVault(artifactId), getSelf());
         }
     }
@@ -91,6 +106,7 @@ public class VaultManagerActor extends AbstractActor
         }
         else
         {
+            log.warning("Artifact [" + artifactId + "] not found in the vault");
             getSender().tell(new ArtifactNotFoundInVault(artifactId), getSelf());
         }
     }

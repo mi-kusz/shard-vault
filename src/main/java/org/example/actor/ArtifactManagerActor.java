@@ -16,6 +16,7 @@ import org.example.message.warehouse.DeleteShardFromWarehouse;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 public class ArtifactManagerActor extends AbstractActor
 {
@@ -36,7 +37,7 @@ public class ArtifactManagerActor extends AbstractActor
 
         this.artifactId = artifactId;
 
-        int shardSize = (int) Math.ceil((double) data.size() / numberOfShards);
+        int shardSize = data.size() / numberOfShards;
 
         warehouses = new ArrayList<>(warehouses);
 
@@ -45,7 +46,16 @@ public class ArtifactManagerActor extends AbstractActor
         for (int shardId = 0; shardId < numberOfShards; ++shardId)
         {
             int startIndex = shardId * shardSize;
-            int endIndex = Math.min((shardId + 1) * shardSize, data.size());
+            int endIndex;
+
+            if (shardId == numberOfShards - 1)
+            {
+                endIndex = data.size();
+            }
+            else
+            {
+                endIndex = (shardId + 1) * shardSize;
+            }
 
             log.info("Shard [" + shardId + "] range: [" + startIndex + ":" + endIndex + "]");
 
@@ -72,7 +82,7 @@ public class ArtifactManagerActor extends AbstractActor
 
     private void getArtifact(GetArtifactFromManager message)
     {
-        getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSender()), "artifactCollector-" + artifactId);
+        getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSender()), "artifactCollector-" + artifactId + "-" + UUID.randomUUID());
     }
 
     private void deleteArtifact(DeleteArtifactFromManager message)
