@@ -60,11 +60,6 @@ public class ShardCollectorActor extends AbstractActor
 
     private void askForShards(CollectShardsForCollector message)
     {
-        askForShards();
-    }
-
-    private void askForShards()
-    {
         for (int shardId : warehouses.keys())
         {
             for (ActorRef warehouse : warehouses.get(shardId))
@@ -77,11 +72,9 @@ public class ShardCollectorActor extends AbstractActor
 
     private void buildArtifact(ShardResponseFromWarehouse message)
     {
-        buildArtifact(message.shardId(), message.data());
-    }
+        int shardId = message.shardId();
+        List<Byte> data = message.data();
 
-    private void buildArtifact(Integer shardId, List<Byte> data)
-    {
         List<Byte> currentValue = shards.get(shardId);
 
         if (currentValue == null)

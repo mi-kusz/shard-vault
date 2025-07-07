@@ -56,20 +56,19 @@ public class VaultManagerActor extends AbstractActor
                 .build();
     }
 
-    private void addArtifact(String artifactId, List<Byte> data)
+    private void addArtifact(AddArtifactToVault message)
     {
-        ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount), "artifactManager-" + artifactId);
+        String artifactId = message.artifactId();
+        List<Byte> data = message.data();
 
+        ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount), "artifactManager-" + artifactId);
         artifactManagers.put(artifactId, artifactManager);
     }
 
-    private void addArtifact(AddArtifactToVault message)
+    private void getArtifact(GetArtifactFromVault message)
     {
-        addArtifact(message.artifactId(), message.data());
-    }
+        String artifactId = message.artifactId();
 
-    private void getArtifact(String artifactId)
-    {
         if (artifactManagers.containsKey(artifactId))
         {
             ActorRef artifactManger = artifactManagers.get(artifactId);
@@ -81,13 +80,10 @@ public class VaultManagerActor extends AbstractActor
         }
     }
 
-    private void getArtifact(GetArtifactFromVault message)
+    private void deleteArtifact(DeleteArtifactFromVault message)
     {
-        getArtifact(message.artifactId());
-    }
+        String artifactId = message.artifactId();
 
-    private void deleteArtifact(String artifactId)
-    {
         if (artifactManagers.containsKey(artifactId))
         {
             ActorRef artifactManger = artifactManagers.get(artifactId);
@@ -97,10 +93,5 @@ public class VaultManagerActor extends AbstractActor
         {
             getSender().tell(new ArtifactNotFoundInVault(artifactId), getSelf());
         }
-    }
-
-    private void deleteArtifact(DeleteArtifactFromVault message)
-    {
-        deleteArtifact(message.artifactId());
     }
 }

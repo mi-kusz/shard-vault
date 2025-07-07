@@ -4,12 +4,9 @@ import akka.actor.AbstractActor;
 import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-import org.example.message.warehouse.ArtifactNotFoundInWarehouse;
-import org.example.message.warehouse.ShardNotFoundInWarehouse;
-import org.example.message.warehouse.AddShardToWarehouse;
-import org.example.message.warehouse.DeleteShardFromWarehouse;
-import org.example.message.warehouse.GetShardFromWarehouse;
-import org.example.message.warehouse.ShardResponseFromWarehouse;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
+import org.example.message.warehouse.*;
 
 import java.util.HashMap;
 import java.util.List;
@@ -40,11 +37,16 @@ public class WarehouseActor extends AbstractActor
                 .match(AddShardToWarehouse.class, this::addShard)
                 .match(DeleteShardFromWarehouse.class, this::deleteShard)
                 .match(GetShardFromWarehouse.class, this::getShard)
+                .match(GetStatusOfWarehouse.class, this::getStatus)
                 .build();
     }
 
-    private void addShard(String artifactId, Integer shardId, List<Byte> data)
+    private void addShard(AddShardToWarehouse message)
     {
+        String artifactId = message.artifactId();
+        int shardId = message.shardId();
+        List<Byte> data = message.data();
+
         if (!warehouse.containsKey(artifactId))
         {
             warehouse.put(artifactId, new HashMap<>());
@@ -55,13 +57,11 @@ public class WarehouseActor extends AbstractActor
         log.info("Stored shard [" + shardId + "] of artifact [" + artifactId + "]");
     }
 
-    private void addShard(AddShardToWarehouse message)
+    private void deleteShard(DeleteShardFromWarehouse message)
     {
-        addShard(message.artifactId(), message.shardId(), message.data());
-    }
+        String artifactId = message.artifactId();
+        int shardId = message.shardId();
 
-    private void deleteShard(String artifactId, Integer shardId)
-    {
         if (warehouse.containsKey(artifactId))
         {
             var shards = warehouse.get(artifactId);
@@ -85,13 +85,11 @@ public class WarehouseActor extends AbstractActor
         }
     }
 
-    private void deleteShard(DeleteShardFromWarehouse message)
+    private void getShard(GetShardFromWarehouse message)
     {
-        deleteShard(message.artifactId(), message.shardId());
-    }
+        String artifactId = message.artifactId();
+        int shardId = message.shardId();
 
-    private void getShard(String artifactId, Integer shardId)
-    {
         if (warehouse.containsKey(artifactId))
         {
             var shards = warehouse.get(artifactId);
@@ -116,8 +114,20 @@ public class WarehouseActor extends AbstractActor
         }
     }
 
-    private void getShard(GetShardFromWarehouse message)
+    private void getStatus(GetStatusOfWarehouse message)
     {
-        getShard(message.artifactId(), message.shardId());
+        Multimap<String, Integer> shards = ArrayListMultimap.create();
+
+        for (var entry : warehouse.entrySet())
+        {
+            String artifactId = entry.getKey();
+
+            for (int shard : entry.getValue().keySet())
+            {
+                shards.put(artifactId, shard);
+            }
+        }
+
+        getSender().tell(new StatusResponseOfWarehouse(warehouseId, shards), getSelf());
     }
 }

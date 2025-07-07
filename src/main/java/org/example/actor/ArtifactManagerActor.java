@@ -72,7 +72,7 @@ public class ArtifactManagerActor extends AbstractActor
 
     private void getArtifact(GetArtifactFromManager message)
     {
-        ActorRef collector = getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSender()), "artifactCollector-" + artifactId);
+        getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSender()), "artifactCollector-" + artifactId);
     }
 
     private void deleteArtifact(DeleteArtifactFromManager message)
