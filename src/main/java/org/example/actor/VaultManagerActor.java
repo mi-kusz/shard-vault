@@ -47,7 +47,7 @@ public class VaultManagerActor extends AbstractActor
         for (int i = 0; i < initialWarehouses; ++i)
         {
             int id = nextWarehouseId++;
-            warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "warehouse-" + id));
+            warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "Warehouse-" + id));
         }
 
         log.info("Created VaultManager");
@@ -60,6 +60,7 @@ public class VaultManagerActor extends AbstractActor
                 .match(AddArtifactToVault.class, this::addArtifact)
                 .match(GetArtifactFromVault.class, this::getArtifact)
                 .match(DeleteArtifactFromVault.class, this::deleteArtifact)
+                .match(AddWarehouseToVault.class, this::addWarehouseToVault)
                 .build();
     }
 
@@ -76,7 +77,7 @@ public class VaultManagerActor extends AbstractActor
         else
         {
             ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data,
-                    warehouses.values().stream().toList(),numberOfShards, replicaCount), "artifactManager-" + artifactId + "-" + UUID.randomUUID());
+                    warehouses.values().stream().toList(),numberOfShards, replicaCount), "ArtifactManager-" + artifactId + "-" + UUID.randomUUID());
             artifactManagers.put(artifactId, artifactManager);
         }
     }
@@ -105,12 +106,20 @@ public class VaultManagerActor extends AbstractActor
         {
             ActorRef artifactManager = artifactManagers.get(artifactId);
             artifactManagers.remove(artifactId);
-            artifactManager.tell(new DeleteArtifactFromManager(), getSender());
+            artifactManager.tell(new DeleteArtifactFromManager(), getSelf());
         }
         else
         {
             log.warning("Artifact [" + artifactId + "] not found in the vault");
             getSender().tell(new ArtifactNotFoundInVault(artifactId), getSelf());
         }
+    }
+
+    private void addWarehouseToVault(AddWarehouseToVault message)
+    {
+        int id = nextWarehouseId++;
+        warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "Warehouse-" + id));
+
+        log.info("Added warehouse [" + id + "] to vault");
     }
 }
