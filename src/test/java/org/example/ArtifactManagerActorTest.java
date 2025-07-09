@@ -17,7 +17,6 @@ import scala.concurrent.duration.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,18 +45,12 @@ public class ArtifactManagerActorTest
             warehouseAssignment.put(i, testProbe.ref());
         }
 
-        artifactManager = system.actorOf(ArtifactManagerActor.props(artifactId, Collections.nCopies(101, (byte) 1), warehouseAssignment, 5, numberOfWarehouses));
-
-        // Wait for the creation of actors
-        Thread.sleep(1000);
+        artifactManager = system.actorOf(ArtifactManagerActor.props(artifactId, Collections.nCopies(101, (byte) 1), warehouseAssignment, 5));
 
         // Clear waiting messages
         for (TestProbe testProbe : testProbes)
         {
-            while (testProbe.msgAvailable())
-            {
-                testProbe.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
-            }
+            testProbe.receiveOne(Duration.create(1, TimeUnit.SECONDS));
         }
     }
 
@@ -68,7 +61,7 @@ public class ArtifactManagerActorTest
     }
 
     @Test
-    public void testDeleteArtifact() throws ExecutionException, InterruptedException
+    public void testDeleteArtifact()
     {
         artifactManager.tell(new DeleteArtifactFromManager(), ActorRef.noSender());
 

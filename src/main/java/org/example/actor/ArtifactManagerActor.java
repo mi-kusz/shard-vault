@@ -25,12 +25,12 @@ public class ArtifactManagerActor extends AbstractActor
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
-    public static Props props(String artifactId, List<Byte> data, Multimap<Integer, ActorRef> warehouses, int numberOfShards, int replicaCount)
+    public static Props props(String artifactId, List<Byte> data, Multimap<Integer, ActorRef> warehouses, int numberOfShards)
     {
-        return Props.create(ArtifactManagerActor.class, () -> new ArtifactManagerActor(artifactId, data, warehouses, numberOfShards, replicaCount));
+        return Props.create(ArtifactManagerActor.class, () -> new ArtifactManagerActor(artifactId, data, warehouses, numberOfShards));
     }
 
-    public ArtifactManagerActor(String artifactId, List<Byte> data, Multimap<Integer, ActorRef> warehouses, int numberOfShards, int replicaCount)
+    public ArtifactManagerActor(String artifactId, List<Byte> data, Multimap<Integer, ActorRef> warehouses, int numberOfShards)
     {
         this.artifactId = artifactId;
 

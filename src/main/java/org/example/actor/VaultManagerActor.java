@@ -82,7 +82,7 @@ public class VaultManagerActor extends AbstractActor
             System.out.println(assignedWarehouses);
 
             ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data,
-                    assignedWarehouses, numberOfShards, replicaCount), "ArtifactManager-" + artifactId + "-" + UUID.randomUUID());
+                    assignedWarehouses, numberOfShards), "ArtifactManager-" + artifactId + "-" + UUID.randomUUID());
             artifactManagers.put(artifactId, artifactManager);
         }
     }

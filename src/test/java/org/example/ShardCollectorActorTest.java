@@ -64,13 +64,11 @@ public class ShardCollectorActorTest
     {
         system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));;
 
-        Thread.sleep(200);
-
         for (int shardId : testProbes.keySet())
         {
             for (TestProbe testProbe : testProbes.get(shardId))
             {
-                GetShardFromWarehouse message = testProbe.expectMsgClass(GetShardFromWarehouse.class);
+                GetShardFromWarehouse message = testProbe.expectMsgClass(Duration.create(200, TimeUnit.MILLISECONDS), GetShardFromWarehouse.class);
                 assertEquals(artifactId, message.artifactId());
                 assertEquals(shardId, message.shardId());
             }
