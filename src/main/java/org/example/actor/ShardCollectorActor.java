@@ -11,11 +11,16 @@ import org.example.message.TimeoutMessage;
 import org.example.message.collector.ArtifactResponseFromCollector;
 import org.example.message.collector.CannotRecoverArtifact;
 import org.example.message.collector.CollectShardsForCollector;
+import org.example.message.warehouse.ArtifactNotFoundInWarehouse;
 import org.example.message.warehouse.GetShardFromWarehouse;
+import org.example.message.warehouse.ShardNotFoundInWarehouse;
 import org.example.message.warehouse.ShardResponseFromWarehouse;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 public class ShardCollectorActor extends AbstractActor
 {
@@ -69,8 +74,8 @@ public class ShardCollectorActor extends AbstractActor
                 .match(CollectShardsForCollector.class, this::askForShards)
                 .match(ShardResponseFromWarehouse.class, this::buildArtifact)
                 .match(TimeoutMessage.class, this::timeout)
-                //.match(ArtifactNotFoundInWarehouse.class)
-                //.match(ShardNotFoundInWarehouse.class)
+                .match(ArtifactNotFoundInWarehouse.class, this::artifactNotFound)
+                .match(ShardNotFoundInWarehouse.class, this::shardNotFound)
                 .build();
     }
 
@@ -141,5 +146,15 @@ public class ShardCollectorActor extends AbstractActor
         }
 
         getContext().stop(getSelf());
+    }
+
+    private void artifactNotFound(ArtifactNotFoundInWarehouse message)
+    {
+
+    }
+
+    private void shardNotFound(ShardNotFoundInWarehouse message)
+    {
+
     }
 }

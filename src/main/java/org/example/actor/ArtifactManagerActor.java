@@ -94,5 +94,8 @@ public class ArtifactManagerActor extends AbstractActor
 
             warehouse.tell(new DeleteShardFromWarehouse(artifactId, shardId), getSelf());
         }
+        dataWarehouses.clear();
+
+        getContext().stop(getSelf());
     }
 }

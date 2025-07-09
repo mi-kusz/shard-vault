@@ -13,6 +13,7 @@ import org.example.message.vault.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class VaultManagerActor extends AbstractActor
 {
@@ -74,7 +75,8 @@ public class VaultManagerActor extends AbstractActor
         }
         else
         {
-            ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data, warehouses.values().stream().toList(), numberOfShards, replicaCount), "artifactManager-" + artifactId);
+            ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data,
+                    warehouses.values().stream().toList(),numberOfShards, replicaCount), "artifactManager-" + artifactId + "-" + UUID.randomUUID());
             artifactManagers.put(artifactId, artifactManager);
         }
     }
@@ -101,8 +103,9 @@ public class VaultManagerActor extends AbstractActor
 
         if (artifactManagers.containsKey(artifactId))
         {
-            ActorRef artifactManger = artifactManagers.get(artifactId);
-            artifactManger.tell(new DeleteArtifactFromManager(), getSender());
+            ActorRef artifactManager = artifactManagers.get(artifactId);
+            artifactManagers.remove(artifactId);
+            artifactManager.tell(new DeleteArtifactFromManager(), getSender());
         }
         else
         {
