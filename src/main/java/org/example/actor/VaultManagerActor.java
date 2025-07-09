@@ -6,14 +6,13 @@ import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.manager.GetArtifactFromManager;
 import org.example.message.vault.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class VaultManagerActor extends AbstractActor
 {
@@ -35,6 +34,8 @@ public class VaultManagerActor extends AbstractActor
     public VaultManagerActor(int numberOfShards, int replicaCount, int initialWarehouses)
     {
         Preconditions.checkArgument(initialWarehouses >= 1, "Warehouses number must be greater or equal 1");
+        Preconditions.checkArgument(replicaCount % 2 == 1, "Replica count should be odd");
+        Preconditions.checkArgument(replicaCount <= initialWarehouses, "Replica count must be lesser or equal to the number of warehouses");
 
         this.numberOfShards = numberOfShards;
         this.replicaCount = replicaCount;
@@ -76,8 +77,12 @@ public class VaultManagerActor extends AbstractActor
         }
         else
         {
+            Multimap<Integer, ActorRef> assignedWarehouses = assignWarehouses();
+
+            System.out.println(assignedWarehouses);
+
             ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data,
-                    warehouses.values().stream().toList(),numberOfShards, replicaCount), "ArtifactManager-" + artifactId + "-" + UUID.randomUUID());
+                    assignedWarehouses, numberOfShards, replicaCount), "ArtifactManager-" + artifactId + "-" + UUID.randomUUID());
             artifactManagers.put(artifactId, artifactManager);
         }
     }
@@ -121,5 +126,22 @@ public class VaultManagerActor extends AbstractActor
         warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "Warehouse-" + id));
 
         log.info("Added warehouse [" + id + "] to vault");
+    }
+
+    private Multimap<Integer, ActorRef> assignWarehouses()
+    {
+        ArrayList<ActorRef> warehousesShuffled = new ArrayList<>(warehouses.values());
+        Multimap<Integer, ActorRef> warehousesAssignment = ArrayListMultimap.create();
+
+        for (int shardId = 0; shardId < numberOfShards; ++shardId)
+        {
+            Collections.shuffle(warehousesShuffled);
+            for (ActorRef warehouse : warehousesShuffled.subList(0, replicaCount))
+            {
+                warehousesAssignment.put(shardId, warehouse);
+            }
+        }
+
+        return warehousesAssignment;
     }
 }

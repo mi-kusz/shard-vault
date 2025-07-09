@@ -5,52 +5,54 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.manager.GetArtifactFromManager;
 import org.example.message.warehouse.AddShardToWarehouse;
 import org.example.message.warehouse.DeleteShardFromWarehouse;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
 public class ArtifactManagerActor extends AbstractActor
 {
     private final String artifactId;
-    private final Multimap<Integer, ActorRef> dataWarehouses = ArrayListMultimap.create();
+    private final Multimap<Integer, ActorRef> dataWarehouses;
+
+    // Variables used only in preStart method (so ArtifactManager doesn't send messages from constructor)
+    private List<Byte> _data;
+    private final int _numberOfShards;
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
-    public static Props props(String artifactId, List<Byte> data, List<ActorRef> warehouses, int numberOfShards, int replicaCount)
+    public static Props props(String artifactId, List<Byte> data, Multimap<Integer, ActorRef> warehouses, int numberOfShards, int replicaCount)
     {
         return Props.create(ArtifactManagerActor.class, () -> new ArtifactManagerActor(artifactId, data, warehouses, numberOfShards, replicaCount));
     }
 
-    public ArtifactManagerActor(String artifactId, List<Byte> data, List<ActorRef> warehouses, int numberOfShards, int replicaCount)
+    public ArtifactManagerActor(String artifactId, List<Byte> data, Multimap<Integer, ActorRef> warehouses, int numberOfShards, int replicaCount)
     {
-        Preconditions.checkArgument(replicaCount % 2 == 1, "Replica count should be odd");
-        Preconditions.checkArgument(replicaCount <= warehouses.size(), "Replica count must be lesser or equal to the number of warehouses");
-
         this.artifactId = artifactId;
 
-        int shardSize = data.size() / numberOfShards;
+        dataWarehouses = warehouses;
 
-        warehouses = new ArrayList<>(warehouses);
+        this._data = data;
+        this._numberOfShards = numberOfShards;
+    }
 
-        log.info("Creating ArtifactManager [" + artifactId + "]. Data length: " + data.size());
+    @Override
+    public void preStart()
+    {
+        int shardSize = _data.size() / _numberOfShards;
 
-        for (int shardId = 0; shardId < numberOfShards; ++shardId)
+        for (int shardId = 0; shardId < _numberOfShards; ++shardId)
         {
             int startIndex = shardId * shardSize;
             int endIndex;
 
-            if (shardId == numberOfShards - 1)
+            if (shardId == _numberOfShards - 1)
             {
-                endIndex = data.size();
+                endIndex = _data.size();
             }
             else
             {
@@ -59,16 +61,18 @@ public class ArtifactManagerActor extends AbstractActor
 
             log.info("Shard [" + shardId + "] range: [" + startIndex + ":" + endIndex + "]");
 
-            List<Byte> shard = data.subList(startIndex, endIndex);
+            List<Byte> shard = _data.subList(startIndex, endIndex);
 
-            Collections.shuffle(warehouses);
-
-            for (ActorRef warehouse : warehouses.subList(0, replicaCount))
+            for (ActorRef warehouse : dataWarehouses.get(shardId))
             {
-                dataWarehouses.put(shardId, warehouse);
                 warehouse.tell(new AddShardToWarehouse(artifactId, shardId, shard), getSelf());
             }
         }
+
+        log.info("Created ArtifactManager [" + artifactId + "]. Data length: " + _data.size());
+
+        // Cleanup
+        this._data = null;
     }
 
     @Override

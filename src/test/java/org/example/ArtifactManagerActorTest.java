@@ -4,6 +4,8 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.testkit.TestKit;
 import akka.testkit.TestProbe;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import org.example.actor.ArtifactManagerActor;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.warehouse.DeleteShardFromWarehouse;
@@ -24,7 +26,6 @@ public class ArtifactManagerActorTest
 {
     private ActorSystem system;
     private final List<TestProbe> testProbes = new ArrayList<>();
-    private final List<ActorRef> warehouses = new ArrayList<>();
     private ActorRef artifactManager;
     private final String artifactId = "ArtifactName";
 
@@ -33,18 +34,21 @@ public class ArtifactManagerActorTest
     {
         system = ActorSystem.create("TestSystem");
 
+        Multimap<Integer, ActorRef> warehouseAssignment = ArrayListMultimap.create();
+
         int numberOfWarehouses = 5;
 
         for (int i = 0; i < numberOfWarehouses; ++i)
         {
             TestProbe testProbe = new TestProbe(system);
             testProbes.add(testProbe);
-            warehouses.add(testProbe.ref());
+
+            warehouseAssignment.put(i, testProbe.ref());
         }
 
-        artifactManager = system.actorOf(ArtifactManagerActor.props(artifactId, Collections.nCopies(101, (byte) 1), warehouses, 5, numberOfWarehouses));
+        artifactManager = system.actorOf(ArtifactManagerActor.props(artifactId, Collections.nCopies(101, (byte) 1), warehouseAssignment, 5, numberOfWarehouses));
 
-        // Wait for creation of actors
+        // Wait for the creation of actors
         Thread.sleep(1000);
 
         // Clear waiting messages
