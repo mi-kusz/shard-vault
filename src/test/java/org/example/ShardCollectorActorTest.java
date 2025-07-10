@@ -32,7 +32,7 @@ public class ShardCollectorActorTest
 
     Multimap<Integer, ActorRef> warehouses = ArrayListMultimap.create();
 
-    private int numberOfShards = 5;
+    private final int numberOfShards = 5;
 
     private final String artifactId = "ArtifactName";
 
@@ -106,7 +106,7 @@ public class ShardCollectorActorTest
         {
             for (TestProbe testProbe : testProbes.get(shardId))
             {
-                testProbe.receiveOne(Duration.create(1, TimeUnit.SECONDS));
+                testProbe.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
                 testProbe.reply(new ShardNotFoundInWarehouse(artifactId, shardId));
             }
         }

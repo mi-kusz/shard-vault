@@ -4,6 +4,7 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.pattern.Patterns;
 import akka.testkit.TestKit;
+import akka.testkit.TestProbe;
 import akka.util.Timeout;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -27,13 +28,16 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 public class WarehouseActorTest
 {
     private ActorSystem system;
+    private TestProbe vaultProbe;
     private ActorRef warehouse;
+    private final int warehouseId = 0;
 
     @BeforeEach
     public void setup()
     {
         system = ActorSystem.create("TestSystem");
-        warehouse = system.actorOf(WarehouseActor.props(0));
+        vaultProbe = new TestProbe(system);
+        warehouse = system.actorOf(WarehouseActor.props(warehouseId, vaultProbe.ref()));
     }
 
     @AfterEach
@@ -218,5 +222,19 @@ public class WarehouseActorTest
             assertEquals(artifactId, shardResponse.artifactId());
             assertEquals(shardId1, shardResponse.shardId());
         }};
+    }
+
+    @Test
+    public void testGetNumberOfStoredShards()
+    {
+        String artifactId = "ArtifactName";
+        int shardId = 0;
+        List<Byte> data = Collections.nCopies(5, (byte) 1);
+
+        warehouse.tell(new AddShardToWarehouse(artifactId, shardId, data), ActorRef.noSender());
+
+        NumberOfStoredShards numberOfStoredShards = vaultProbe.expectMsgClass(Duration.create(200, TimeUnit.MILLISECONDS), NumberOfStoredShards.class);
+        assertEquals(warehouseId, numberOfStoredShards.warehouseId());
+        assertEquals(1, numberOfStoredShards.numberOfStoredShards());
     }
 }

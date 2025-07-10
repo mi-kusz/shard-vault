@@ -1,6 +1,7 @@
 package org.example.actor;
 
 import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
@@ -16,17 +17,19 @@ public class WarehouseActor extends AbstractActor
 {
     private final int warehouseId;
     private final Map<String, Map<Integer, List<Byte>>> warehouse = new HashMap<>();
+    private final ActorRef vault;
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
-    public static Props props(int warehouseId)
+    public static Props props(int warehouseId, ActorRef vault)
     {
-        return Props.create(WarehouseActor.class, () -> new WarehouseActor(warehouseId));
+        return Props.create(WarehouseActor.class, () -> new WarehouseActor(warehouseId, vault));
     }
 
-    public WarehouseActor(int warehouseId)
+    public WarehouseActor(int warehouseId, ActorRef vault)
     {
         this.warehouseId = warehouseId;
+        this.vault = vault;
         log.info("Created warehouse [" + warehouseId + "]");
     }
 
@@ -55,6 +58,7 @@ public class WarehouseActor extends AbstractActor
 
         warehouse.get(artifactId).put(shardId, data);
         log.info("Stored shard [" + shardId + "] of artifact [" + artifactId + "]");
+        sendNumberOfStoredShards();
     }
 
     private void deleteShard(DeleteShardFromWarehouse message)
@@ -75,6 +79,7 @@ public class WarehouseActor extends AbstractActor
                 {
                     warehouse.remove(artifactId);
                     log.info("Removed a map for storing shards of [" + artifactId + "]");
+                    sendNumberOfStoredShards();
                 }
             }
             else
@@ -135,5 +140,17 @@ public class WarehouseActor extends AbstractActor
         }
 
         getSender().tell(new StatusResponseOfWarehouse(warehouseId, shards), getSelf());
+    }
+
+    private void sendNumberOfStoredShards()
+    {
+        int counter = 0;
+
+        for (var singleArtifact : warehouse.values())
+        {
+            counter += singleArtifact.size();
+        }
+
+        vault.tell(new NumberOfStoredShards(warehouseId, counter), getSelf());
     }
 }
