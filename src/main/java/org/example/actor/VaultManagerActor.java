@@ -11,6 +11,7 @@ import com.google.common.collect.Multimap;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.manager.GetArtifactFromManager;
 import org.example.message.vault.*;
+import org.example.message.warehouse.NumberOfStoredShards;
 
 import java.util.*;
 
@@ -23,6 +24,7 @@ public class VaultManagerActor extends AbstractActor
     private int nextWarehouseId = 0;
     private final Map<String, ActorRef> artifactManagers = new HashMap<>();
     private final Map<Integer, ActorRef> warehouses = new HashMap<>();
+    private final Map<Integer, Integer> warehouseSizes = new HashMap<>();
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
@@ -48,7 +50,7 @@ public class VaultManagerActor extends AbstractActor
         for (int i = 0; i < initialWarehouses; ++i)
         {
             int id = nextWarehouseId++;
-            warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "Warehouse-" + id));
+            addWarehouse(id);
         }
 
         log.info("Created VaultManager");
@@ -62,6 +64,7 @@ public class VaultManagerActor extends AbstractActor
                 .match(GetArtifactFromVault.class, this::getArtifact)
                 .match(DeleteArtifactFromVault.class, this::deleteArtifact)
                 .match(AddWarehouseToVault.class, this::addWarehouseToVault)
+                .match(NumberOfStoredShards.class, this::updateWarehouseSizes)
                 .build();
     }
 
@@ -78,8 +81,6 @@ public class VaultManagerActor extends AbstractActor
         else
         {
             Multimap<Integer, ActorRef> assignedWarehouses = assignWarehouses();
-
-            System.out.println(assignedWarehouses);
 
             ActorRef artifactManager = getContext().actorOf(ArtifactManagerActor.props(artifactId, data,
                     assignedWarehouses, numberOfShards), "ArtifactManager-" + artifactId + "-" + UUID.randomUUID());
@@ -123,25 +124,45 @@ public class VaultManagerActor extends AbstractActor
     private void addWarehouseToVault(AddWarehouseToVault message)
     {
         int id = nextWarehouseId++;
-        warehouses.put(id, getContext().actorOf(WarehouseActor.props(id), "Warehouse-" + id));
+        addWarehouse(id);
 
         log.info("Added warehouse [" + id + "] to vault");
     }
 
     private Multimap<Integer, ActorRef> assignWarehouses()
     {
-        ArrayList<ActorRef> warehousesShuffled = new ArrayList<>(warehouses.values());
         Multimap<Integer, ActorRef> warehousesAssignment = ArrayListMultimap.create();
+
+        Map<Integer, Integer> expectedSizesOfWarehouses = new HashMap<>(warehouseSizes);
 
         for (int shardId = 0; shardId < numberOfShards; ++shardId)
         {
-            Collections.shuffle(warehousesShuffled);
-            for (ActorRef warehouse : warehousesShuffled.subList(0, replicaCount))
+            List<Map.Entry<Integer, Integer>> sorted = expectedSizesOfWarehouses.entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
+
+            for (var entry : sorted.subList(0, replicaCount))
             {
-                warehousesAssignment.put(shardId, warehouse);
+                int warehouseId = entry.getKey();
+                warehousesAssignment.put(shardId, warehouses.get(warehouseId));
+                expectedSizesOfWarehouses.merge(warehouseId, 1, Integer::sum);
             }
         }
 
         return warehousesAssignment;
+    }
+
+    private void addWarehouse(int id)
+    {
+        warehouses.put(id, getContext().actorOf(WarehouseActor.props(id, getSelf()), "Warehouse-" + id));
+        warehouseSizes.put(id, 0);
+    }
+
+    private void updateWarehouseSizes(NumberOfStoredShards message)
+    {
+        int warehouseId = message.warehouseId();
+        int numberOfShards = message.numberOfStoredShards();
+
+        warehouseSizes.put(warehouseId, numberOfShards);
+
+        log.info("Updated warehouse [" + warehouseId + "] size to: " + numberOfShards);
     }
 }
