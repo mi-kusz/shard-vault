@@ -17,16 +17,14 @@ import org.example.message.warehouse.ShardNotFoundInWarehouse;
 import org.example.message.warehouse.ShardResponseFromWarehouse;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 public class ShardCollectorActor extends AbstractActor
 {
     private final String artifactId;
     private final Multimap<Integer, ActorRef> warehouses;
-    private final List<List<Byte>> shards;
+    private final List<Map<List<Byte>, Integer>> shards;
+    private final int numberOfShards;
     private int expectedResponses;
     private int receivedResponses = 0;
 
@@ -45,8 +43,14 @@ public class ShardCollectorActor extends AbstractActor
         this.artifactId = artifactId;
         this.warehouses = warehouses;
 
-        int maxShardId = Collections.max(warehouses.keySet());
-        this.shards = new ArrayList<>(Collections.nCopies(maxShardId + 1, null));
+        numberOfShards = Collections.max(warehouses.keySet()) + 1;
+
+        this.shards = new ArrayList<>(numberOfShards);
+
+        for (int i = 0; i < numberOfShards; ++i)
+        {
+            this.shards.add(new HashMap<>());
+        }
 
         this.originalSender = originalSender;
 
@@ -102,18 +106,7 @@ public class ShardCollectorActor extends AbstractActor
         int shardId = message.shardId();
         List<Byte> data = message.data();
 
-        List<Byte> currentValue = shards.get(shardId);
-
-        if (currentValue == null)
-        {
-            shards.set(shardId, data);
-        }
-        else if (!currentValue.equals(data))
-        {
-            // TODO: Quorum of shards
-            // TODO: Replicate bad shards again (send message to ArtifactManagerActor)
-            throw new IllegalArgumentException("Shards are not the same");
-        }
+        shards.get(shardId).merge(data, 1, Integer::sum);
 
         if (receivedResponses == expectedResponses)
         {
@@ -128,14 +121,25 @@ public class ShardCollectorActor extends AbstractActor
 
     private void finish()
     {
+        // TODO: Quorum of shards (when 2 different options have same count)
+        // TODO: Replicate bad shards again (send message to ArtifactManagerActor)
+
         if (!timeout.isCancelled())
         {
             timeout.cancel();
         }
 
-        if (!shards.contains(null))
+        if (shards.stream().noneMatch(Map::isEmpty))
         {
-            List<Byte> artifact = shards.stream().flatMap(Collection::stream).toList();
+            List<List<Byte>> result = new LinkedList<>();
+
+            for (int shardId = 0; shardId < numberOfShards; ++shardId)
+            {
+                List<Byte> mostPopular = Collections.max(shards.get(shardId).entrySet(), Map.Entry.comparingByValue()).getKey();
+                result.add(mostPopular);
+            }
+
+            List<Byte> artifact = result.stream().flatMap(Collection::stream).toList();
             originalSender.tell(new ArtifactResponseFromCollector(artifactId, artifact), getSelf());
             log.info("Sending artifact [" + artifactId + "] to client");
         }

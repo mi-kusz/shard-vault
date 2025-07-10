@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import scala.concurrent.duration.Duration;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -28,11 +29,12 @@ public class ShardCollectorActorTest
     private ActorSystem system;
 
     Multimap<Integer, TestProbe> testProbes = ArrayListMultimap.create();
-    private TestProbe originalSender;
-
     Multimap<Integer, ActorRef> warehouses = ArrayListMultimap.create();
 
+    private TestProbe originalSender;
+
     private final int numberOfShards = 5;
+    private final int numberOfReplicas = 3;
 
     private final String artifactId = "ArtifactName";
 
@@ -43,10 +45,13 @@ public class ShardCollectorActorTest
 
         for (int i = 0; i < numberOfShards; ++i)
         {
-            TestProbe testProbe = new TestProbe(system);
-            ActorRef warehouse = testProbe.ref();
-            testProbes.put(i, testProbe);
-            warehouses.put(i, warehouse);
+            for (int replica = 0; replica < numberOfReplicas; ++replica)
+            {
+                TestProbe testProbe = new TestProbe(system);
+                ActorRef warehouse = testProbe.ref();
+                testProbes.put(i, testProbe);
+                warehouses.put(i, warehouse);
+            }
         }
 
         originalSender = new TestProbe(system);
@@ -62,7 +67,7 @@ public class ShardCollectorActorTest
     @Test
     public void testAskForShards() throws InterruptedException
     {
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));;
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -81,7 +86,7 @@ public class ShardCollectorActorTest
         List<Byte> expectedData = new ArrayList<>();
         for (int i = 0; i < numberOfShards; ++i) expectedData.add((byte) 1);
 
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));;
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -100,7 +105,7 @@ public class ShardCollectorActorTest
     @Test
     public void testBuildArtifactFailed()
     {
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));;
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -113,5 +118,41 @@ public class ShardCollectorActorTest
 
         CannotRecoverArtifact message = originalSender.expectMsgClass(CannotRecoverArtifact.class);
         assertEquals(artifactId, message.artifactId());
+    }
+
+    @Test
+    public void testQuorum()
+    {
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+
+        List<Byte> expectedData = new ArrayList<>();
+        for (int i = 0; i < numberOfShards; ++i) expectedData.add((byte) 1);
+
+        for (int shardId : testProbes.keySet())
+        {
+            List<TestProbe> probes = testProbes.get(shardId).stream().toList();
+
+            for (int i = 0; i < probes.size(); ++i)
+            {
+                TestProbe testProbe = probes.get(i);
+                testProbe.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
+                List<Byte> data;
+
+                if (i == 0) // Invalid other data
+                {
+                    data = Collections.nCopies(10, (byte) 100);
+                }
+                else // Valid data
+                {
+                    data = Collections.nCopies(1, (byte) 1);
+                }
+
+                testProbe.reply(new ShardResponseFromWarehouse(artifactId, shardId, data));
+            }
+        }
+
+        ArtifactResponseFromCollector message = originalSender.expectMsgClass(ArtifactResponseFromCollector.class);
+        assertEquals(artifactId, message.artifactId());
+        assertEquals(expectedData, message.data());
     }
 }
