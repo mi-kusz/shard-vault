@@ -9,6 +9,7 @@ import akka.event.LoggingAdapter;
 import com.google.common.collect.Multimap;
 import org.example.message.TimeoutMessage;
 import org.example.message.collector.ArtifactResponseFromCollector;
+import org.example.message.collector.CannotCompleteQuorum;
 import org.example.message.collector.CannotRecoverArtifact;
 import org.example.message.collector.CollectShardsForCollector;
 import org.example.message.warehouse.ArtifactNotFoundInWarehouse;
@@ -121,7 +122,6 @@ public class ShardCollectorActor extends AbstractActor
 
     private void finish()
     {
-        // TODO: Quorum of shards (when 2 different options have same count)
         // TODO: Replicate bad shards again (send message to ArtifactManagerActor)
 
         if (!timeout.isCancelled())
@@ -129,14 +129,34 @@ public class ShardCollectorActor extends AbstractActor
             timeout.cancel();
         }
 
+        end:
         if (shards.stream().noneMatch(Map::isEmpty))
         {
             List<List<Byte>> result = new LinkedList<>();
 
             for (int shardId = 0; shardId < numberOfShards; ++shardId)
             {
-                List<Byte> mostPopular = Collections.max(shards.get(shardId).entrySet(), Map.Entry.comparingByValue()).getKey();
-                result.add(mostPopular);
+                Map<List<Byte>, Integer> options = shards.get(shardId);
+
+                int maxVotes = Collections.max(options.values());
+
+                List<List<Byte>> candidates = options.entrySet().stream()
+                        .filter(entry -> entry.getValue() == maxVotes)
+                        .map(Map.Entry::getKey)
+                        .toList();
+
+                if (candidates.size() == 1)
+                {
+                    result.add(candidates.getFirst());
+                }
+                else
+                {
+                    originalSender.tell(new CannotCompleteQuorum(artifactId), originalSender);
+                    log.error("Cannot complete quorum. There are " + candidates.size() + " candidates with " + maxVotes + " votes");
+                    getContext().stop(getSelf());
+                    return;
+                }
+
             }
 
             List<Byte> artifact = result.stream().flatMap(Collection::stream).toList();
@@ -146,7 +166,7 @@ public class ShardCollectorActor extends AbstractActor
         else
         {
             originalSender.tell(new CannotRecoverArtifact(artifactId), originalSender);
-            log.error("Cannot rebuild tha artifact [" + artifactId + "]");
+            log.error("Cannot rebuild the artifact [" + artifactId + "]");
         }
 
         getContext().stop(getSelf());

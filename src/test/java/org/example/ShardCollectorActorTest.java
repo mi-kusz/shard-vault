@@ -8,6 +8,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import org.example.actor.ShardCollectorActor;
 import org.example.message.collector.ArtifactResponseFromCollector;
+import org.example.message.collector.CannotCompleteQuorum;
 import org.example.message.collector.CannotRecoverArtifact;
 import org.example.message.warehouse.GetShardFromWarehouse;
 import org.example.message.warehouse.ShardNotFoundInWarehouse;
@@ -154,5 +155,29 @@ public class ShardCollectorActorTest
         ArtifactResponseFromCollector message = originalSender.expectMsgClass(ArtifactResponseFromCollector.class);
         assertEquals(artifactId, message.artifactId());
         assertEquals(expectedData, message.data());
+    }
+
+    @Test
+    public void testTieInQuorum()
+    {
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+
+        for (int shardId : testProbes.keySet())
+        {
+            List<TestProbe> probes = testProbes.get(shardId).stream().toList();
+
+            TestProbe testProbe1 = probes.getFirst();
+            TestProbe testProbe2 = probes.get(1);
+
+
+            testProbe1.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
+            testProbe2.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
+
+            testProbe1.reply(new ShardResponseFromWarehouse(artifactId, shardId, Collections.nCopies(10, (byte) 100)));
+            testProbe2.reply(new ShardResponseFromWarehouse(artifactId, shardId, Collections.nCopies(1, (byte) 1)));
+        }
+
+        CannotCompleteQuorum message = originalSender.expectMsgClass(CannotCompleteQuorum.class);
+        assertEquals(artifactId, message.artifactId());
     }
 }
