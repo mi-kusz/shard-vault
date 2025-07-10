@@ -66,7 +66,7 @@ public class ShardCollectorActorTest
     }
 
     @Test
-    public void testAskForShards() throws InterruptedException
+    public void testAskForShards()
     {
         system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
 
@@ -82,7 +82,7 @@ public class ShardCollectorActorTest
     }
 
     @Test
-    public void testBuildArtifact() throws InterruptedException
+    public void testBuildArtifact()
     {
         List<Byte> expectedData = new ArrayList<>();
         for (int i = 0; i < numberOfShards; ++i) expectedData.add((byte) 1);

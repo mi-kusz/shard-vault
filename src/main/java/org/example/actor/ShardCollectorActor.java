@@ -128,8 +128,6 @@ public class ShardCollectorActor extends AbstractActor
         {
             timeout.cancel();
         }
-
-        end:
         if (shards.stream().noneMatch(Map::isEmpty))
         {
             List<List<Byte>> result = new LinkedList<>();
