@@ -12,6 +12,7 @@ import org.example.message.collector.ArtifactResponseFromCollector;
 import org.example.message.collector.CannotCompleteQuorum;
 import org.example.message.collector.CannotRecoverArtifact;
 import org.example.message.collector.CollectShardsForCollector;
+import org.example.message.manager.InconsistencyFound;
 import org.example.message.warehouse.ArtifactNotFoundInWarehouse;
 import org.example.message.warehouse.GetShardFromWarehouse;
 import org.example.message.warehouse.ShardNotFoundInWarehouse;
@@ -29,17 +30,18 @@ public class ShardCollectorActor extends AbstractActor
     private int expectedResponses;
     private int receivedResponses = 0;
 
+    private final ActorRef artifactManager;
     private final ActorRef originalSender;
     private Cancellable timeout;
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
-    public static Props props(String artifactId, Multimap<Integer, ActorRef> warehouses, ActorRef originalSender)
+    public static Props props(String artifactId, Multimap<Integer, ActorRef> warehouses, ActorRef artifactManager, ActorRef originalSender)
     {
-        return Props.create(ShardCollectorActor.class, () -> new ShardCollectorActor(artifactId, warehouses, originalSender));
+        return Props.create(ShardCollectorActor.class, () -> new ShardCollectorActor(artifactId, warehouses, artifactManager, originalSender));
     }
 
-    public ShardCollectorActor(String artifactId, Multimap<Integer, ActorRef> warehouses, ActorRef originalSender)
+    public ShardCollectorActor(String artifactId, Multimap<Integer, ActorRef> warehouses, ActorRef artifactManager, ActorRef originalSender)
     {
         this.artifactId = artifactId;
         this.warehouses = warehouses;
@@ -53,6 +55,7 @@ public class ShardCollectorActor extends AbstractActor
             this.shards.add(new HashMap<>());
         }
 
+        this.artifactManager = artifactManager;
         this.originalSender = originalSender;
 
         log.info("Created artifact collector of artifact [" + artifactId + "]");
@@ -122,12 +125,11 @@ public class ShardCollectorActor extends AbstractActor
 
     private void finish()
     {
-        // TODO: Replicate bad shards again (send message to ArtifactManagerActor)
-
         if (!timeout.isCancelled())
         {
             timeout.cancel();
         }
+
         if (shards.stream().noneMatch(Map::isEmpty))
         {
             List<List<Byte>> result = new LinkedList<>();
@@ -145,7 +147,14 @@ public class ShardCollectorActor extends AbstractActor
 
                 if (candidates.size() == 1)
                 {
-                    result.add(candidates.getFirst());
+                    List<Byte> correctData = candidates.getFirst();
+                    result.add(correctData);
+
+                    if (options.size() > 1)
+                    {
+                        artifactManager.tell(new InconsistencyFound(shardId, correctData), getSelf());
+                        log.info("Detected inconsistency of shard [" + shardId + "] of artifact [" + artifactId + "]");
+                    }
                 }
                 else
                 {

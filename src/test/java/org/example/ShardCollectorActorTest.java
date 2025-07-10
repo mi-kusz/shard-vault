@@ -10,6 +10,7 @@ import org.example.actor.ShardCollectorActor;
 import org.example.message.collector.ArtifactResponseFromCollector;
 import org.example.message.collector.CannotCompleteQuorum;
 import org.example.message.collector.CannotRecoverArtifact;
+import org.example.message.manager.InconsistencyFound;
 import org.example.message.warehouse.GetShardFromWarehouse;
 import org.example.message.warehouse.ShardNotFoundInWarehouse;
 import org.example.message.warehouse.ShardResponseFromWarehouse;
@@ -32,6 +33,7 @@ public class ShardCollectorActorTest
     Multimap<Integer, TestProbe> testProbes = ArrayListMultimap.create();
     Multimap<Integer, ActorRef> warehouses = ArrayListMultimap.create();
 
+    private TestProbe artifactManager;
     private TestProbe originalSender;
 
     private final int numberOfShards = 5;
@@ -55,6 +57,7 @@ public class ShardCollectorActorTest
             }
         }
 
+        artifactManager = new TestProbe(system);
         originalSender = new TestProbe(system);
     }
 
@@ -68,7 +71,7 @@ public class ShardCollectorActorTest
     @Test
     public void testAskForShards()
     {
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, artifactManager.ref(), originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -87,7 +90,7 @@ public class ShardCollectorActorTest
         List<Byte> expectedData = new ArrayList<>();
         for (int i = 0; i < numberOfShards; ++i) expectedData.add((byte) 1);
 
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, artifactManager.ref(), originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -106,7 +109,7 @@ public class ShardCollectorActorTest
     @Test
     public void testBuildArtifactFailed()
     {
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, artifactManager.ref(), originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -124,7 +127,7 @@ public class ShardCollectorActorTest
     @Test
     public void testQuorum()
     {
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, artifactManager.ref(), originalSender.ref()));
 
         List<Byte> expectedData = new ArrayList<>();
         for (int i = 0; i < numberOfShards; ++i) expectedData.add((byte) 1);
@@ -160,7 +163,7 @@ public class ShardCollectorActorTest
     @Test
     public void testTieInQuorum()
     {
-        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, originalSender.ref()));
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, artifactManager.ref(), originalSender.ref()));
 
         for (int shardId : testProbes.keySet())
         {
@@ -168,7 +171,6 @@ public class ShardCollectorActorTest
 
             TestProbe testProbe1 = probes.getFirst();
             TestProbe testProbe2 = probes.get(1);
-
 
             testProbe1.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
             testProbe2.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
@@ -179,5 +181,43 @@ public class ShardCollectorActorTest
 
         CannotCompleteQuorum message = originalSender.expectMsgClass(CannotCompleteQuorum.class);
         assertEquals(artifactId, message.artifactId());
+    }
+
+    @Test
+    public void testInconsistencyFound()
+    {
+        system.actorOf(ShardCollectorActor.props(artifactId, warehouses, artifactManager.ref(), originalSender.ref()));
+
+        List<Byte> expectedData = List.of((byte) 1);
+
+        for (int shardId : testProbes.keySet())
+        {
+            List<TestProbe> probes = testProbes.get(shardId).stream().toList();
+
+            for (int i = 0; i < probes.size(); ++i)
+            {
+                TestProbe testProbe = probes.get(i);
+                testProbe.receiveOne(Duration.create(100, TimeUnit.MILLISECONDS));
+                List<Byte> data;
+
+                if (i == 0) // Invalid other data
+                {
+                    data = Collections.nCopies(10, (byte) i);
+                }
+                else // Valid data
+                {
+                    data = Collections.nCopies(1, (byte) 1);
+                }
+
+                testProbe.reply(new ShardResponseFromWarehouse(artifactId, shardId, data));
+            }
+        }
+
+        for (int shardId : testProbes.keySet())
+        {
+            InconsistencyFound message = artifactManager.expectMsgClass(InconsistencyFound.class);
+            assertEquals(expectedData, message.correctData());
+        }
+
     }
 }

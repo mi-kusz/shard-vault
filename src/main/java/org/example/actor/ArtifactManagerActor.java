@@ -8,6 +8,7 @@ import akka.event.LoggingAdapter;
 import com.google.common.collect.Multimap;
 import org.example.message.manager.DeleteArtifactFromManager;
 import org.example.message.manager.GetArtifactFromManager;
+import org.example.message.manager.InconsistencyFound;
 import org.example.message.warehouse.AddShardToWarehouse;
 import org.example.message.warehouse.DeleteShardFromWarehouse;
 
@@ -81,12 +82,13 @@ public class ArtifactManagerActor extends AbstractActor
         return receiveBuilder()
                 .match(GetArtifactFromManager.class, this::getArtifact)
                 .match(DeleteArtifactFromManager.class, this::deleteArtifact)
+                .match(InconsistencyFound.class, this::callReplicator)
                 .build();
     }
 
     private void getArtifact(GetArtifactFromManager message)
     {
-        getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSender()), "ArtifactCollector-" + artifactId + "-" + UUID.randomUUID());
+        getContext().actorOf(ShardCollectorActor.props(artifactId, dataWarehouses, getSelf(), getSender()), "ArtifactCollector-" + artifactId + "-" + UUID.randomUUID());
     }
 
     private void deleteArtifact(DeleteArtifactFromManager message)
@@ -101,5 +103,13 @@ public class ArtifactManagerActor extends AbstractActor
         dataWarehouses.clear();
 
         getContext().stop(getSelf());
+    }
+
+    private void callReplicator(InconsistencyFound message)
+    {
+        int shardId = message.shardId();
+        List<Byte> correctData = message.correctData();
+
+        getContext().actorOf(ShardReplicatorActor.props(artifactId, shardId, correctData, dataWarehouses.get(shardId).stream().toList()), "ShardReplicator-" + artifactId + "-" + shardId + "-" + UUID.randomUUID());
     }
 }
