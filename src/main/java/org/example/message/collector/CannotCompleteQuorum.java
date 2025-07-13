@@ -1,5 +1,7 @@
 package org.example.message.collector;
 
-public record CannotCompleteQuorum(String artifactId)
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public record CannotCompleteQuorum(@JsonProperty("artifactId") String artifactId)
 {
 }

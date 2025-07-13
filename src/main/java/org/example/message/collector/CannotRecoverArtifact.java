@@ -1,5 +1,7 @@
 package org.example.message.collector;
 
-public record CannotRecoverArtifact(String artifactId)
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public record CannotRecoverArtifact(@JsonProperty("artifactId") String artifactId)
 {
 }
