@@ -12,8 +12,6 @@ import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.server.AllDirectives;
 import akka.http.javadsl.server.PathMatchers;
 import akka.http.javadsl.server.Route;
-import akka.http.scaladsl.marshalling.Marshalling;
-import akka.http.scaladsl.marshalling.Marshalling$;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import org.example.message.collector.ArtifactResponseFromCollector;
@@ -26,17 +24,17 @@ import java.time.Duration;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeoutException;
 
-import static akka.http.javadsl.server.PathMatchers.segment;
-
 public class HttpServer extends AllDirectives
 {
     private final ActorSystem system;
     private final ActorRef vaultManager;
+    private final LoggingAdapter log;
 
     public HttpServer(ActorSystem system, ActorRef vaultManager)
     {
         this.system = system;
         this.vaultManager = vaultManager;
+        this.log = Logging.getLogger(system, this);
     }
 
     public void start()
@@ -50,14 +48,14 @@ public class HttpServer extends AllDirectives
                 .bind(routes);
 
         binding
-                .thenAccept(b -> System.out.println("OK"))
+                .thenAccept(b -> log.info("Server bound to localhost:8080"))
                 .exceptionally(e -> {
-                    System.err.println("Error");
+                    log.error("Binding error: " + e.getMessage());
                     return null;
                 });
     }
 
-    private Route createRoutes()
+    public Route createRoutes()
     {
         return concat(
                 handleAddArtifact(),
@@ -71,6 +69,9 @@ public class HttpServer extends AllDirectives
         return path("artifact", () ->
                 put(
                         () -> entity(Jackson.unmarshaller(AddArtifactToVault.class), request -> {
+
+                            log.info("Received request to add artifact: {}", request.artifactId());
+
                             CompletionStage<Object> future = FutureConverters.asJava(Patterns.ask(vaultManager, new AddArtifactToVault(request.artifactId(), request.data()), Timeout.create(Duration.ofSeconds(1))));
                             CompletionStage<HttpResponse> httpFuture = future.handle((response, throwable) -> {
                                 if (throwable != null)
@@ -110,6 +111,9 @@ public class HttpServer extends AllDirectives
     private Route handleGetArtifact() {
         return path(PathMatchers.segment("artifact").slash(PathMatchers.segment()), artifactId ->
                 get(() -> {
+
+                    log.info("Received request to get artifact: {}", artifactId);
+
                     CompletionStage<Object> future = FutureConverters.asJava(Patterns.ask(vaultManager, new GetArtifactFromVault(artifactId), Timeout.create(Duration.ofSeconds(1))));
                     CompletionStage<HttpResponse> httpFuture = future.handle((response, throwable) -> {
                         if (throwable != null)
@@ -154,6 +158,9 @@ public class HttpServer extends AllDirectives
     {
         return path(PathMatchers.segment("artifact").slash(PathMatchers.segment()), artifactId ->
                 delete(() -> {
+
+                    log.info("Received request to delete artifact: {}", artifactId);
+
                     CompletionStage<Object> future = FutureConverters.asJava(Patterns.ask(vaultManager, new DeleteArtifactFromVault(artifactId), Timeout.create(Duration.ofSeconds(1))));
                     CompletionStage<HttpResponse> httpFuture = future.handle((response, throwable) -> {
                         if (throwable != null)
